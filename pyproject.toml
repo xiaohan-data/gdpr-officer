@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gdpr-officer"
+version = "0.1.0"
+description = "PII encryption and GDPR-compliant data erasure for data platforms. Delete a key, forget a customer."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "XiaoHan Li"}
+]
+keywords = ["gdpr", "pii", "encryption", "crypto-shredding", "right-to-be-forgotten", "data-governance", "data-pipeline", "medallion-architecture", "data-privacy", "data-masking"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Database",
+]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "cryptography>=41.0",
+    "click>=8.0",
+    "duckdb>=0.9.0",
+]
+
+[project.optional-dependencies]
+gcp = ["google-cloud-firestore>=2.0"]
+pandas = ["pandas>=1.5"]
+all = ["gdpr-officer[gcp,pandas]"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1.0", "pandas>=1.5"]
+
+[project.scripts]
+gdpr-officer = "gdpr_officer.cli:main"
+
+[project.urls]
+Repository = "https://github.com/xiaohan-data/gdpr-officer"
+
+[tool.setuptools.packages.find]
+include = ["gdpr_officer*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
