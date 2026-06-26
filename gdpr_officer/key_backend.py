@@ -89,6 +89,22 @@ class KeyBackend(abc.ABC):
         """Batch key retrieval. Backends can override for optimised bulk operations."""
         return {cid: self.get_or_create_key(cid) for cid in customer_ids}
 
+    def filter_forgotten(self, customer_ids: list[str]) -> set[str]:
+        """
+        Return the customer_ids that appear in the deletion log (customers that
+        have been forgotten). A customer with no active key is only forgotten if
+        they are in this set; otherwise they are new.
+
+        Default implementation scans the deletion log; backends should override
+        with a targeted query.
+        """
+        requested = set(customer_ids)
+        return {
+            record.customer_id
+            for record in self.get_deletion_log()
+            if record.customer_id in requested
+        }
+
 
 # Backend registry
 BACKENDS: dict[str, type[KeyBackend]] = {}

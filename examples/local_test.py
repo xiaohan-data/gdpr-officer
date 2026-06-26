@@ -86,7 +86,7 @@ hex_df = db.execute(
 for _, row in hex_df.iterrows():
     print(f"  {row['customer_id']}: {row['key_hex']}")
 
-print(f"\n3 customers = 3 unique keys, each 32 bytes (256 bits)")
+print("\n3 customers = 3 unique keys, each 32 bytes (256 bits)")
 
 print("\n" + "=" * 80)
 print("DUCKDB KEY STORE — deletion_log table")

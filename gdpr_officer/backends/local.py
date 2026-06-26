@@ -171,6 +171,9 @@ class LocalKeystore(KeyBackend):
 
     def batch_get_or_create(self, customer_ids: list[str]) -> dict[str, CustomerKey]:
         """Optimised batch operation."""
+        if not customer_ids:
+            return {}
+
         results = {}
         now = datetime.now(timezone.utc)
 

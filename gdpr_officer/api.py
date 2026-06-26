@@ -45,6 +45,7 @@ class PiiEncryptor:
         key_backend: str = "local",
         key_backend_config: dict[str, Any] | None = None,
         *,
+        on_forgotten: str = "error",
         _config: GdprOfficerConfig | None = None,
     ):
         if _config is not None:
@@ -58,7 +59,9 @@ class PiiEncryptor:
         self._backend: KeyBackend = get_backend(
             self._config.key_backend, **self._config.key_backend_config
         )
-        self._engine = EncryptionEngine(self._backend, self._config)
+        self._engine = EncryptionEngine(
+            self._backend, self._config, on_forgotten=on_forgotten
+        )
 
     @classmethod
     def from_config(cls, path: str | Path) -> PiiEncryptor:
@@ -75,6 +78,10 @@ class PiiEncryptor:
     def encrypt_df(self, df: Any, customer_id: str, pii: list[str]) -> Any:
         """
         Encrypt PII columns in a pandas DataFrame. Returns a new DataFrame.
+
+        A forgotten customer raises ForgottenCustomerError, or with
+        on_forgotten="skip" their rows are dropped and a warning logged, so
+        the output can have fewer rows than the input.
 
         Example:
             df = officer.encrypt_df(df, customer_id="patient_number", pii=["ssn", "address"])
@@ -165,7 +172,10 @@ class PiiEncryptor:
         return self._backend.delete_key(customer_id, reason, requested_by)
 
     def is_forgotten(self, customer_id: str) -> bool:
-        return self._backend.get_key(customer_id) is None
+        """True if the customer was forgotten: no active key and present in the deletion log."""
+        if self._backend.get_key(customer_id) is not None:
+            return False
+        return bool(self._backend.filter_forgotten([customer_id]))
 
     def list_active_customers(self) -> list[str]:
         return self._backend.list_customers()

@@ -1,5 +1,5 @@
 """
-Tests for gdpr-officer v0.2.
+Tests for gdpr-officer.
 
 Covers: DuckDB backend, encryption engine, DataFrame API, GDPR lifecycle,
 key migration, and config parsing.
@@ -238,14 +238,17 @@ class TestGdprLifecycle:
             o.decrypt_row(enc, customer_id=CID, pii=PII)
 
     def test_forget_is_permanent(self):
-        o = _officer()
+        # After erasure, a customer who reappears stays forgotten and their
+        # original data stays unrecoverable.
+        o = _officer(on_forgotten="skip")
         enc = o.encrypt_row(_row(), customer_id=CID, pii=PII)
         o.forget("cust-001", reason="test", requested_by="test")
 
-        # New key for same customer won't decrypt old data
-        o.encrypt_row(_row(), customer_id=CID, pii=PII)
-        dec = o.decrypt_row(enc, customer_id=CID, pii=PII)
-        assert dec["email"] != "alice@example.com"
+        o.encrypt_rows([_row("other"), _row("cust-001")], customer_id=CID, pii=PII)
+
+        assert o.is_forgotten("cust-001")  # still forgotten
+        with pytest.raises(KeyError):
+            o.decrypt_row(enc, customer_id=CID, pii=PII)  # original PII unrecoverable
 
     def test_deletion_log(self):
         o = _officer()
