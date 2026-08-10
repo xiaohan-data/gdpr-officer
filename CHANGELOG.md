@@ -3,6 +3,11 @@
 All notable changes to this project are documented here.
 This project follows semantic versioning.
 
+## [0.2.1] - 2026-08-10
+ 
+### Fixed
+- CLI `encrypt` now reports failed rows to stderr and exits non-zero.
+
 ## [0.2.0] - 2026-06-26
 
 ### Added

@@ -149,6 +149,13 @@ def encrypt(ctx, source, input_file, output_file):
         json.dump(result.rows, f, indent=2)
 
     click.echo(f"Encrypted {result.encrypted_rows}/{result.total_rows} rows.")
+    if result.errors:
+        click.echo(f"{len(result.errors)} row(s) failed:", err=True)
+        for entry in result.errors[:3]:
+            click.echo(f"  row {entry['row_index']}: {entry['error']}", err=True)
+        if len(result.errors) > 3:
+            click.echo(f"  … and {len(result.errors) - 3} more", err=True)
+        sys.exit(1)
     if result.new_keys_created:
         click.echo(f"New keys created: {result.new_keys_created}")
 
