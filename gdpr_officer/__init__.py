@@ -3,7 +3,7 @@ gdpr-officer: PII encryption and GDPR-compliant data erasure for data platforms.
 Delete a key, forget a customer.
 """
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 from gdpr_officer.api import PiiEncryptor
 from gdpr_officer.config import GdprOfficerConfig
