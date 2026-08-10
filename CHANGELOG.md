@@ -3,6 +3,11 @@
 All notable changes to this project are documented here.
 This project follows semantic versioning.
 
+## [0.2.2] - 2026-08-10
+ 
+### Added
+- PyPI trusted-publishing release workflow
+
 ## [0.2.1] - 2026-08-10
  
 ### Fixed
