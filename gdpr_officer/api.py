@@ -86,9 +86,8 @@ class PiiEncryptor:
         """
         Encrypt PII columns in a pandas DataFrame. Returns a new DataFrame.
 
-        generalise maps a pii column to a (new_column, callable) pair. The
-        callable's result is written to the new column, next to the encrypted
-        original.
+        Generalise maps a pii column to a (new_column, callable) pair. 
+        The callable's result is written to the new column, next to the encrypted original.
 
         An erased customer raises ForgottenCustomerError, or with
         on_forgotten="skip" their rows are dropped and a warning logged, so
