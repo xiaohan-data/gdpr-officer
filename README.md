@@ -267,7 +267,7 @@ python examples/local_test.py    # Detailed inspection of encrypted output and k
 | `decrypt_df(df, customer_id, pii)` | Decrypt PII columns; forgotten customers' values stay encrypted |
 | `decrypt_row(row, customer_id, pii)` | Decrypt PII columns; raises `KeyError` if customer was forgotten |
 | `forget(customer_id, reason, requested_by)` | Delete a customer's encryption key and log the erasure |
-| `is_forgotten(customer_id)` | Check whether a customer has been erased: no active key and an erasure record |
+| `is_forgotten(customer_id)` | Check whether a customer has been forgotten: no active key and has an erasure record |
 | `list_active_customers()` | List all customer IDs with active keys |
 | `get_deletion_log()` | Return all erasure audit records |
 | `migrate_keys(source, target)` | Copy keys between backends preserving exact key bytes |

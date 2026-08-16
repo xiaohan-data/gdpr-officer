@@ -136,7 +136,7 @@ class EncryptionEngine:
         Encrypt PII columns in a single row, optionally generalising columns.
         A generalised column is written next to the encrypted original.
 
-        Raises ForgottenCustomerError if the customer was erased.
+        Raises ForgottenCustomerError if the customer was forgotten.
         """
         customer_id = str(row.get(source.customer_id_column, ""))
         if not customer_id:
@@ -152,7 +152,7 @@ class EncryptionEngine:
             if existing is not None:
                 key = existing
             else:
-                # No key. Don't create one if the customer was erased.
+                # No key. Don't create one if the customer was forgotten.
                 forgotten = (
                     _forgotten
                     if _forgotten is not None
