@@ -1,16 +1,18 @@
 """
 Configuration for gdpr-officer.
 
-Optional YAML configuration for defining multiple data sources and their PII columns.
+Optional YAML configuration for defining multiple data sources.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
+
+from gdpr_officer.generalise import Generaliser, build_spec, normalise_generalise
 
 
 @dataclass
@@ -20,7 +22,7 @@ class SourceConfig:
     name: str
     customer_id_column: str
     pii_columns: list[str]
-    passthrough_columns: Optional[list[str]] = None
+    generalise: dict[str, tuple[str, Generaliser]] = field(default_factory=dict)
 
     def validate(self):
         if not self.customer_id_column:
@@ -32,6 +34,11 @@ class SourceConfig:
                 f"Source '{self.name}': customer_id_column '{self.customer_id_column}' "
                 "cannot be a pii_column — it must remain readable for key lookup"
             )
+        if self.generalise:
+            try:
+                normalise_generalise(self.generalise, self.customer_id_column, self.pii_columns)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"Source '{self.name}': {e}") from e
 
 
 @dataclass
@@ -75,7 +82,7 @@ class GdprOfficerConfig:
                     "customer_id_column", data.get("customer_identifier", "")
                 ),
                 pii_columns=s.get("pii_columns", []),
-                passthrough_columns=s.get("passthrough_columns"),
+                generalise=build_spec(s.get("generalise", {})),
             )
             for s in data.get("sources", [])
         ]

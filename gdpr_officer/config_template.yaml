@@ -1,0 +1,63 @@
+# gdpr-officer configuration. Copy to gdpr_officer.yaml and edit.
+#
+# One entry per table under sources. 
+#   pii_columns  encrypted with the customer's key
+#   generalise   adds a generalised column next to the encrypted original
+#
+# Columns in neither section pass through unchanged.
+
+key_backend: local
+key_backend_config:
+  db_path: gdpr_officer_keys.duckdb
+
+# In production, store keys outside the data platform:
+#
+# key_backend: gcp_firestore
+# key_backend_config:
+#   project: my-gcp-project
+
+sources:
+  - name: customers
+    customer_id_column: customer_id
+    pii_columns:
+      - email
+      - phone
+      - full_name
+      - birthdate
+      - postcode
+      - amount
+      - ip_address
+
+    # Names of columns to be generalised.
+    # Generalised columns here must also be in pii_columns.
+    # Four generalisation rules: age_group, mapping, numeric_range, truncate.
+    # 'to' is the name of the target generalised column. 
+    generalise:
+      birthdate:
+        rule: age_group
+        to: age_group
+        edges: [0, 18, 30, 40, 50, 65]     # 0-17, 18-29, 30-39, 40-49, 50-64, 65+
+
+      postcode:
+        rule: mapping
+        to: state
+        values:
+          "2000": NSW
+          "3000": VIC
+          "4000": QLD
+        default: Other                     # for values not listed above
+
+      amount:
+        rule: numeric_range
+        to: amount_range
+        edges: [0, 50000, 100000, 200000]  # 0-49999, 50000-99999, 100000-199999, 200000+
+
+      ip_address:
+        rule: truncate
+        to: ip_prefix
+        length: 7                          # first 7 characters: 203.0.113.42 -> 203.0.1
+
+  - name: invoices
+    customer_id_column: account_id
+    pii_columns:
+      - email

@@ -62,6 +62,81 @@ rows = officer.encrypt_rows(rows, customer_id="...", pii=[...])
 row = officer.encrypt_row(row, customer_id="...", pii=[...])
 ```
 
+### Generalise
+
+Enables analytical use of sensitive values.
+Creates a generalised version of a column, next to the encrypted original.
+Such as: an age group from a birthdate, a state from a postcode.
+
+```python
+from gdpr_officer import PiiEncryptor, age_group
+
+df = officer.encrypt_df(
+    df,
+    customer_id="customer_id",
+    pii=["email", "phone", "birthdate"],
+    generalise={"birthdate": ("age_group", age_group(edges=[0, 18, 30, 40, 50, 65]))},
+)
+# birthdate is encrypted as usual; a new age_group column holds "18-29",
+# "30-39", ... in the clear.
+```
+
+Each entry maps a source column to a `(new_column, callable)` pair. Two rules:
+the source column must also be listed in `pii`, and the target column must be a
+new name.
+
+Built-in rules:
+
+| Rule | Does | Settings |
+|------|------|----------|
+| `age_group` | Birthdate to an age group | `edges`, `labels`, `as_of` |
+| `mapping` | Your own lookup table | `values`, `default` |
+| `numeric_range` | Number to a labelled range | `edges`, `labels`, `default` |
+| `truncate` | Keep the first N characters | `length`, `default` |
+
+An unmapped or unparseable value returns the rule's `default` (`None` if unset),
+never the original value.
+
+#### Configuring in YAML
+
+Each source has two sections: `pii_columns` to encrypt, and `generalise`.
+Anything not listed passes through unchanged. See
+[`gdpr_officer/config_template.yaml`](gdpr_officer/config_template.yaml) for a
+fuller template.
+
+```yaml
+sources:
+  - name: customers
+    customer_id_column: customer_id
+
+    pii_columns:          # encrypted per customer
+      - email
+      - phone
+      - birthdate         # generalised columns are encrypted too
+      - postcode
+
+    generalise:           # adds a generalised column next to the encrypted original
+      birthdate:
+        rule: age_group
+        to: age_group     # required: name of the target column
+        edges: [0, 18, 30, 40, 50, 65]
+
+      postcode:
+        rule: mapping
+        to: state
+        values:
+          "2000": NSW
+          "3000": VIC
+        default: Other
+```
+
+With a config file, `encrypt_batch` applies a source's rules automatically:
+
+```python
+officer = PiiEncryptor.from_config("gdpr_officer.yaml")
+result = officer.encrypt_batch(rows, "customers")
+```
+
 ### Forget
 
 When a GDPR erasure request arrives, call `forget()` with the customer's identifier. This deletes their encryption key from the key store and writes an audit record. After deletion, every encrypted PII value for that customer across every table in the data lake/house is permanently undecryptable. Non-PII columns remain intact.
@@ -154,7 +229,7 @@ Every `forget()` call writes an audit record to the key store.
 
 ```python
 officer.get_deletion_log()           # All erasure records
-officer.is_forgotten("<customer_id>") # Whether a customer's key has been deleted
+officer.is_forgotten("<customer_id>") # Whether a customer has been erased (no active key and an erasure record)
 officer.list_active_customers()      # All customers with active keys
 ```
 
@@ -185,17 +260,21 @@ python examples/local_test.py    # Detailed inspection of encrypted output and k
 
 | Method | Description |
 |--------|-------------|
-| `PiiEncryptor(key_backend, key_backend_config)` | Create an encryptor with the specified key store backend |
-| `encrypt_df(df, customer_id, pii)` | Encrypt PII columns in a pandas DataFrame |
-| `encrypt_rows(rows, customer_id, pii)` | Encrypt PII columns in a list of dicts |
-| `encrypt_row(row, customer_id, pii)` | Encrypt PII columns in a single dict |
+| `PiiEncryptor(key_backend, key_backend_config, on_forgotten="error")` | Create an encryptor; `on_forgotten` controls whether encrypting an erased customer raises or skips |
+| `encrypt_df(df, customer_id, pii, generalise=None)` | Encrypt PII columns in a pandas DataFrame, optionally adding generalised columns |
+| `encrypt_rows(rows, customer_id, pii, generalise=None)` | Encrypt PII columns in a list of dicts |
+| `encrypt_row(row, customer_id, pii, generalise=None)` | Encrypt PII columns in a single dict |
 | `decrypt_df(df, customer_id, pii)` | Decrypt PII columns; forgotten customers' values stay encrypted |
 | `decrypt_row(row, customer_id, pii)` | Decrypt PII columns; raises `KeyError` if customer was forgotten |
 | `forget(customer_id, reason, requested_by)` | Delete a customer's encryption key and log the erasure |
-| `is_forgotten(customer_id)` | Check whether a customer's key has been deleted |
+| `is_forgotten(customer_id)` | Check whether a customer has been erased: no active key and an erasure record |
 | `list_active_customers()` | List all customer IDs with active keys |
 | `get_deletion_log()` | Return all erasure audit records |
 | `migrate_keys(source, target)` | Copy keys between backends preserving exact key bytes |
+| `age_group(edges, labels, as_of)` | Generaliser: birthdate to a labelled age group |
+| `mapping(values, default)` | Generaliser: your own lookup table |
+| `numeric_range(edges, labels, default)` | Generaliser: number to a labelled range |
+| `truncate(length, default)` | Generaliser: keep the first N characters |
 
 ## CLI reference
 

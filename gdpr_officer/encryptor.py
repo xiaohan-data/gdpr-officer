@@ -1,7 +1,7 @@
 """
 Core PII encryption engine.
 
-Uses AES-256-GCM for column-level encryption. 
+Uses AES-256-GCM for column-level encryption.
 Each encrypted value is a base64-encoded string containing a version prefix, random nonce, and ciphertext.
 """
 
@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from gdpr_officer.config import GdprOfficerConfig, SourceConfig
 from gdpr_officer.exceptions import ForgottenCustomerError
+from gdpr_officer.generalise import Generaliser, GeneraliseSpec, normalise_generalise
 from gdpr_officer.key_backend import CustomerKey, KeyBackend
 
 logger = logging.getLogger("gdpr_officer")
@@ -49,6 +50,30 @@ class BatchResult:
     # Customers skipped as forgotten (on_forgotten="skip")
     forgotten_customers: list[str] = field(default_factory=list)
     forgotten_rows_skipped: int = 0
+
+
+def _generalise_row(
+    row: dict[str, Any],
+    spec: dict[str, tuple[str, Generaliser]],
+) -> dict[str, Any]:
+    """
+    Apply generalisers to one row, preserving column order.
+    The source column keeps its value for encryption,
+    and the target column holds the generalised value.
+    """
+    missing = [src for src in spec if src not in row]
+    if missing:
+        raise ValueError(f"generalise source column(s) not in row: {', '.join(missing)}")
+
+    out: dict[str, Any] = {}
+    for key, value in row.items():
+        out[key] = value
+        if key in spec:
+            target, fn = spec[key]
+            if target in row:
+                raise ValueError(f"generalise target column '{target}' already exists in row")
+            out[target] = fn(value)
+    return out
 
 
 class EncryptionEngine:
@@ -105,9 +130,11 @@ class EncryptionEngine:
         row: dict[str, Any],
         source: SourceConfig,
         _forgotten: set[str] | None = None,
+        generalise: GeneraliseSpec | None = None,
     ) -> EncryptionResult:
         """
-        Encrypt PII columns in a single row.
+        Encrypt PII columns in a single row, optionally generalising columns.
+        A generalised column is written next to the encrypted original.
 
         Raises ForgottenCustomerError if the customer was erased.
         """
@@ -125,7 +152,7 @@ class EncryptionEngine:
             if existing is not None:
                 key = existing
             else:
-                # No key. Don't create one if the customer was forgotten.
+                # No key. Don't create one if the customer was erased.
                 forgotten = (
                     _forgotten
                     if _forgotten is not None
@@ -137,7 +164,12 @@ class EncryptionEngine:
                 key_created = True
             self._key_cache[customer_id] = key
 
-        encrypted_row = dict(row)
+        rules = generalise if generalise is not None else source.generalise
+        if rules:
+            spec = normalise_generalise(rules, source.customer_id_column, source.pii_columns)
+            encrypted_row = _generalise_row(row, spec)
+        else:
+            encrypted_row = dict(row)
         encrypted_columns = []
 
         for col in source.pii_columns:
@@ -152,8 +184,17 @@ class EncryptionEngine:
             key_created=key_created,
         )
 
-    def encrypt_batch(self, rows: list[dict[str, Any]], source: SourceConfig) -> BatchResult:
+    def encrypt_batch(
+        self,
+        rows: list[dict[str, Any]],
+        source: SourceConfig,
+        generalise: GeneraliseSpec | None = None,
+    ) -> BatchResult:
         """Encrypt PII columns in a batch of rows with optimised key fetching."""
+        rules = generalise if generalise is not None else source.generalise
+        if rules:
+            # Validate the spec before any keys are created.
+            normalise_generalise(rules, source.customer_id_column, source.pii_columns)
         result = BatchResult(rows=[], total_rows=len(rows))
 
         customer_ids = list({
@@ -182,7 +223,9 @@ class EncryptionEngine:
                 result.skipped_rows += 1
                 continue
             try:
-                encrypted = self.encrypt_row(row, source, _forgotten=forgotten)
+                encrypted = self.encrypt_row(
+                    row, source, _forgotten=forgotten, generalise=generalise
+                )
                 result.rows.append(encrypted.row)
                 result.encrypted_rows += 1
             except Exception as e:

@@ -21,6 +21,7 @@ from typing import Any
 import gdpr_officer.backends  # noqa: F401 — register backends
 from gdpr_officer.config import GdprOfficerConfig, SourceConfig
 from gdpr_officer.encryptor import BatchResult, EncryptionEngine
+from gdpr_officer.generalise import GeneraliseSpec, normalise_generalise
 from gdpr_officer.key_backend import DeletionRecord, KeyBackend, get_backend
 
 
@@ -75,11 +76,21 @@ class PiiEncryptor:
 
     # ── DataFrame API ───────────────────────────────────────────────
 
-    def encrypt_df(self, df: Any, customer_id: str, pii: list[str]) -> Any:
+    def encrypt_df(
+        self,
+        df: Any,
+        customer_id: str,
+        pii: list[str],
+        generalise: GeneraliseSpec | None = None,
+    ) -> Any:
         """
         Encrypt PII columns in a pandas DataFrame. Returns a new DataFrame.
 
-        A forgotten customer raises ForgottenCustomerError, or with
+        generalise maps a pii column to a (new_column, callable) pair. The
+        callable's result is written to the new column, next to the encrypted
+        original.
+
+        An erased customer raises ForgottenCustomerError, or with
         on_forgotten="skip" their rows are dropped and a warning logged, so
         the output can have fewer rows than the input.
 
@@ -90,7 +101,7 @@ class PiiEncryptor:
 
         source = SourceConfig(name="_inline", customer_id_column=customer_id, pii_columns=pii)
         rows = df.to_dict(orient="records")
-        result = self._engine.encrypt_batch(rows, source)
+        result = self._engine.encrypt_batch(rows, source, generalise=generalise)
 
         if result.errors:
             raise RuntimeError(
@@ -98,7 +109,20 @@ class PiiEncryptor:
                 f"First error: {result.errors[0]['error']}"
             )
 
-        return pd.DataFrame(result.rows, columns=df.columns)
+        columns = list(df.columns)
+        if generalise:
+            spec = normalise_generalise(generalise, source.customer_id_column, pii)
+            columns = []
+            for col in df.columns:
+                if col in spec:
+                    target, _ = spec[col]
+                    columns.append(col)
+                    if target not in columns:
+                        columns.append(target)
+                else:
+                    columns.append(col)
+
+        return pd.DataFrame(result.rows, columns=columns)
 
     def decrypt_df(self, df: Any, customer_id: str, pii: list[str]) -> Any:
         """
@@ -119,11 +143,15 @@ class PiiEncryptor:
     # ── Row/dict API ────────────────────────────────────────────────
 
     def encrypt_rows(
-        self, rows: list[dict[str, Any]], customer_id: str, pii: list[str]
+        self,
+        rows: list[dict[str, Any]],
+        customer_id: str,
+        pii: list[str],
+        generalise: GeneraliseSpec | None = None,
     ) -> list[dict[str, Any]]:
-        """Encrypt PII columns in a list of row dicts."""
+        """Encrypt PII columns in a list of row dicts, optionally generalising first."""
         source = SourceConfig(name="_inline", customer_id_column=customer_id, pii_columns=pii)
-        result = self._engine.encrypt_batch(rows, source)
+        result = self._engine.encrypt_batch(rows, source, generalise=generalise)
         if result.errors:
             raise RuntimeError(
                 f"Encryption failed for {len(result.errors)}/{result.total_rows} rows. "
@@ -132,11 +160,15 @@ class PiiEncryptor:
         return result.rows
 
     def encrypt_row(
-        self, row: dict[str, Any], customer_id: str, pii: list[str]
+        self,
+        row: dict[str, Any],
+        customer_id: str,
+        pii: list[str],
+        generalise: GeneraliseSpec | None = None,
     ) -> dict[str, Any]:
-        """Encrypt PII columns in a single row dict."""
+        """Encrypt PII columns in a single row dict, optionally generalising first."""
         source = SourceConfig(name="_inline", customer_id_column=customer_id, pii_columns=pii)
-        return self._engine.encrypt_row(row, source).row
+        return self._engine.encrypt_row(row, source, generalise=generalise).row
 
     def decrypt_row(
         self, row: dict[str, Any], customer_id: str, pii: list[str]
@@ -172,7 +204,7 @@ class PiiEncryptor:
         return self._backend.delete_key(customer_id, reason, requested_by)
 
     def is_forgotten(self, customer_id: str) -> bool:
-        """True if the customer was forgotten: no active key and present in the deletion log."""
+        """True if the customer was erased: no active key and present in the deletion log."""
         if self._backend.get_key(customer_id) is not None:
             return False
         return bool(self._backend.filter_forgotten([customer_id]))

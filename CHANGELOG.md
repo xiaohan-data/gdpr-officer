@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 This project follows semantic versioning.
+ 
+## [0.3.0] - 2026-08-16
+ 
+### Added
+- Column generalisation: a generalised version of a PII column to enable analytical use. Written to a new
+  column next to the encrypted original. Pass `generalise=` to `encrypt_df`, `encrypt_rows` and
+  `encrypt_row`, or declare it per source in YAML.
+- Four generalisation rules: `age_group`, `mapping`, `numeric_range`, `truncate`.
+- `config_template.yaml`, shipped with the package, showing config
+  sections across multiple tables.
+- `generalise` section on a source in the config file. `encrypt_batch(rows,
+  source)` applies a source's rules automatically.
 
 ## [0.2.2] - 2026-08-10
  
