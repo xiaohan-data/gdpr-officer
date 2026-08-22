@@ -3,6 +3,19 @@
 All notable changes to this project are documented here.
 This project follows semantic versioning.
  
+## [0.4.0] - 2026-08-22
+ 
+### Added
+- Firestore backend test coverage.
+
+### Changed
+- Improved generalisation mapping rule to accept groups of values.
+- Prevents overwrite of an existing key during migration. 
+
+### Fixed
+- Two concurrent pipeline runs creating a key for the same customer will not overwrite the key stored first.
+- Checking which customers were forgotten on the Firestore backend queries the deletion log directly.
+
 ## [0.3.0] - 2026-08-16
  
 ### Added

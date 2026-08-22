@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gdpr-officer"
-version = "0.3.0"
+version = "0.4.0"
 description = "PII encryption and GDPR-compliant data erasure for data platforms. Delete a key, forget a customer."
 readme = "README.md"
 license = {text = "Apache-2.0"}
