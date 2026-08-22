@@ -93,7 +93,7 @@ def test_mapping_rejects_value_in_two_groups():
 
 
 def test_mapping_rejects_string_members():
-    with pytest.raises(ValueError, match="list of values"):
+    with pytest.raises(TypeError, match="list of values"):
         mapping({"EMEA": "NL"})
 
 

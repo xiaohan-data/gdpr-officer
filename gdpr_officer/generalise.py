@@ -105,7 +105,7 @@ def mapping(
     for label, members in groups.items():
         # A bare string would iterate as characters.
         if isinstance(members, str) or not isinstance(members, Sequence):
-            raise ValueError(f"groups['{label}'] must be a list of values")
+            raise TypeError(f"groups['{label}'] must be a list of values")
         for member in members:
             if label_of.setdefault(member, label) != label:
                 raise ValueError(

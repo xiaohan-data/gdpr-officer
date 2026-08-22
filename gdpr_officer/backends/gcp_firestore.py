@@ -22,6 +22,7 @@ from typing import Optional
 try:
     from google.api_core.exceptions import AlreadyExists
     from google.cloud import firestore
+    from google.cloud.firestore_v1 import FieldFilter
 
     HAS_FIRESTORE = True
 except ImportError:
@@ -74,12 +75,11 @@ class FirestoreKeystore(KeyBackend):
         self._deletion_log = self._client.collection(deletion_log_collection)
 
     def get_key(self, customer_id: str) -> Optional[CustomerKey]:
-        doc = self._keys.document(customer_id).get()
+        data = self._keys.document(customer_id).get().to_dict()
 
-        if not doc.exists:
+        if data is None:
             return None
 
-        data = doc.to_dict()
         return CustomerKey(
             customer_id=customer_id,
             key_bytes=data["key_bytes"],
@@ -95,10 +95,17 @@ class FirestoreKeystore(KeyBackend):
         key_bytes = os.urandom(32)
         now = datetime.now(timezone.utc)
 
-        self._keys.document(customer_id).set({
-            "key_bytes": key_bytes,
-            "created_at": now.isoformat(),
-        })
+        try:
+            # create() fails if a key exists due to a concurrent run.
+            self._keys.document(customer_id).create({
+                "key_bytes": key_bytes,
+                "created_at": now.isoformat(),
+            })
+        except AlreadyExists:
+            winner = self.get_key(customer_id)
+            if winner is None:
+                raise
+            return winner
 
         return CustomerKey(
             customer_id=customer_id,
@@ -152,18 +159,41 @@ class FirestoreKeystore(KeyBackend):
 
     def get_deletion_log(self) -> list[DeletionRecord]:
         docs = self._deletion_log.order_by("deleted_at").stream()
-        return [
-            DeletionRecord(
-                customer_id=doc.to_dict()["customer_id"],
-                deleted_at=datetime.fromisoformat(doc.to_dict()["deleted_at"]),
-                reason=doc.to_dict()["reason"],
-                requested_by=doc.to_dict()["requested_by"],
+        records = []
+        for doc in docs:
+            data = doc.to_dict()
+            if data is None:
+                continue
+            records.append(DeletionRecord(
+                customer_id=data["customer_id"],
+                deleted_at=datetime.fromisoformat(data["deleted_at"]),
+                reason=data["reason"],
+                requested_by=data["requested_by"],
+            ))
+        return records
+
+    def filter_forgotten(self, customer_ids: list[str]) -> set[str]:
+        """Which of these customers appear in the deletion log."""
+        if not customer_ids:
+            return set()
+
+        found: set[str] = set()
+        for start in range(0, len(customer_ids), 30):
+            chunk = customer_ids[start:start + 30]
+            query = self._deletion_log.where(
+                filter=FieldFilter("customer_id", "in", chunk)
             )
-            for doc in docs
-        ]
+            for doc in query.stream():
+                data = doc.to_dict()
+                if data is not None:
+                    found.add(data["customer_id"])
+        return found
 
     def batch_get_or_create(self, customer_ids: list[str]) -> dict[str, CustomerKey]:
         """Batch key retrieval with creation for new customers."""
+        if not customer_ids:
+            return {}
+
         results = {}
         now = datetime.now(timezone.utc)
 
@@ -173,40 +203,40 @@ class FirestoreKeystore(KeyBackend):
 
         existing_ids = set()
         for doc in docs:
-            if doc.exists:
-                data = doc.to_dict()
-                existing_ids.add(doc.id)
-                results[doc.id] = CustomerKey(
-                    customer_id=doc.id,
-                    key_bytes=data["key_bytes"],
-                    created_at=datetime.fromisoformat(data["created_at"]),
-                    backend="gcp_firestore",
-                )
+            data = doc.to_dict()
+            if data is None:
+                continue
+            existing_ids.add(doc.id)
+            results[doc.id] = CustomerKey(
+                customer_id=doc.id,
+                key_bytes=data["key_bytes"],
+                created_at=datetime.fromisoformat(data["created_at"]),
+                backend="gcp_firestore",
+            )
 
-        # Create keys for new customers in a batch write
-        batch = self._client.batch()
-        batch_count = 0
-        for cid in customer_ids:
-            if cid not in existing_ids:
-                key_bytes = os.urandom(32)
-                batch.set(self._keys.document(cid), {
-                    "key_bytes": key_bytes,
+        # If any key in a batch already exists, each key is resolved individually.
+        new_ids = [cid for cid in customer_ids if cid not in existing_ids]
+        for start in range(0, len(new_ids), 499):
+            chunk = new_ids[start:start + 499]
+            fresh = {cid: os.urandom(32) for cid in chunk}
+            batch = self._client.batch()
+            for cid in chunk:
+                batch.create(self._keys.document(cid), {
+                    "key_bytes": fresh[cid],
                     "created_at": now.isoformat(),
                 })
+            try:
+                batch.commit()
+            except AlreadyExists:
+                for cid in chunk:
+                    results[cid] = self.create_key(cid)
+                continue
+            for cid in chunk:
                 results[cid] = CustomerKey(
                     customer_id=cid,
-                    key_bytes=key_bytes,
+                    key_bytes=fresh[cid],
                     created_at=now,
                     backend="gcp_firestore",
                 )
-                batch_count += 1
-
-                if batch_count >= 499:
-                    batch.commit()
-                    batch = self._client.batch()
-                    batch_count = 0
-
-        if batch_count > 0:
-            batch.commit()
 
         return results
