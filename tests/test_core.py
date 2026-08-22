@@ -290,16 +290,63 @@ class TestMigration:
         dec = tgt.decrypt_row(enc, customer_id=CID, pii=PII)
         assert dec["email"] == "alice@example.com"
 
-    def test_migrate_skips_existing(self):
+    def test_migrate_skips_key_already_migrated(self):
         src = _officer()
         tgt = _officer()
 
         src.encrypt_row(_row("c1"), customer_id=CID, pii=PII)
-        tgt.encrypt_row(_row("c1"), customer_id=CID, pii=PII)
+        migrate_keys(source=src, target=tgt)
 
+        # Re-running migration finds the same key already existing, skips.
         result = migrate_keys(source=src, target=tgt)
         assert result.skipped == 1
         assert result.migrated == 0
+        assert result.errors == []
+
+    def test_migrate_reports_conflicting_key(self):
+        src = _officer()
+        tgt = _officer()
+
+        # Both stores have created a different key for c1.
+        src.encrypt_row(_row("c1"), customer_id=CID, pii=PII)
+        target_row = tgt.encrypt_row(_row("c1"), customer_id=CID, pii=PII)
+        target_key = tgt.backend.get_key("c1").key_bytes
+
+        result = migrate_keys(source=src, target=tgt)
+        assert result.migrated == 0
+        assert result.skipped == 0
+        assert any("different key" in e for e in result.errors)
+        # The target's key is left as is.
+        assert tgt.backend.get_key("c1").key_bytes == target_key
+        assert tgt.decrypt_row(target_row, customer_id=CID, pii=PII)["email"] == "alice@example.com"
+
+    def test_migrate_rejects_target_that_cannot_import(self):
+        from gdpr_officer.key_backend import KeyBackend
+
+        class NoImport(KeyBackend):
+            def get_key(self, customer_id):
+                return None
+
+            def create_key(self, customer_id):
+                raise NotImplementedError
+
+            def delete_key(self, customer_id, reason, requested_by):
+                raise NotImplementedError
+
+            def list_customers(self):
+                return []
+
+            def get_deletion_log(self):
+                return []
+
+        src = _officer()
+        src.encrypt_row(_row("c1"), customer_id=CID, pii=PII)
+        tgt = _officer()
+        tgt._backend = NoImport()
+
+        # Checks whether the target supports key import.
+        with pytest.raises(NotImplementedError, match="does not support key import"):
+            migrate_keys(source=src, target=tgt)
 
     def test_migrate_multiple_keys(self):
         src = _officer()

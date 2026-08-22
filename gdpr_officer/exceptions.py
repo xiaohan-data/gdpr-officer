@@ -24,3 +24,17 @@ class ForgottenCustomerError(GdprOfficerError):
             "Pass on_forgotten='skip' to drop their rows, or fix the "
             "upstream source so they stop arriving."
         )
+
+
+class KeyExistsError(GdprOfficerError):
+    """
+    Raised when writing a key for a customer who already has a key. 
+    Prevents overwrite of existing keys.
+    """
+
+    def __init__(self, customer_id: str):
+        self.customer_id = customer_id
+        super().__init__(
+            f"Customer '{customer_id}' already has a key. Keys are never overwritten. "
+            "Delete the existing key first if replacing it is genuinely intended."
+        )

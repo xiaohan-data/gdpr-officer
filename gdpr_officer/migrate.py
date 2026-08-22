@@ -20,6 +20,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from gdpr_officer.exceptions import KeyExistsError
+from gdpr_officer.key_backend import KeyBackend
+
 if TYPE_CHECKING:
     from gdpr_officer.api import PiiEncryptor
 
@@ -36,24 +39,32 @@ class MigrationResult:
     errors: list[str] = field(default_factory=list)
 
 
-def migrate_keys(
-    source: PiiEncryptor,
-    target: PiiEncryptor,
-    overwrite: bool = False,
-) -> MigrationResult:
+def migrate_keys(source: PiiEncryptor, target: PiiEncryptor) -> MigrationResult:
     """
     Copy all customer keys from source backend to target backend.
 
-    Args:
-        source: PiiEncryptor with the source key backend.
-        target: PiiEncryptor with the target key backend.
-        overwrite: If True, overwrite existing keys in target.
-                   If False (default), skip customers that already have keys.
+    Keys are written as is: the key bytes and the original creation time are preserved.
+    An existing key in the target is never overwritten.
+
+    A customer whose key in the target matches the source is counted as skipped, 
+    re-running a partial migration is safe. 
+    A key that differs is reported as an error. 
+    Customers in the target's deletion log are never imported, erasure survives migration.
+
+    Raises:
+        NotImplementedError: the target backend cannot import keys.
 
     Returns:
-        MigrationResult with counts and any errors.
+        MigrationResult with counts and any errors. Check .errors, failures are
+        reported there, not raised.
     """
     result = MigrationResult()
+
+    # Check whether the target can import keys.
+    if type(target.backend).put_key is KeyBackend.put_key:
+        raise NotImplementedError(
+            f"{target.backend_name} does not support key import, nothing was migrated"
+        )
 
     customer_ids = source.list_active_customers()
     result.total_keys = len(customer_ids)
@@ -65,25 +76,38 @@ def migrate_keys(
         target.backend_name,
     )
 
+    forgotten_in_target = target.backend.filter_forgotten(customer_ids)
+
     for cid in customer_ids:
         try:
-            # Check if target already has this key
-            if not overwrite:
-                existing = target.backend.get_key(cid)
-                if existing is not None:
-                    result.skipped += 1
-                    continue
+            if cid in forgotten_in_target:
+                result.errors.append(
+                    f"{cid}: erased in target backend - key not imported"
+                )
+                continue
 
-            # Read key from source
             source_key = source.backend.get_key(cid)
             if source_key is None:
                 result.errors.append(f"{cid}: key disappeared from source during migration")
                 continue
 
-            # Write the existing key bytes from source
-            # instead of creating a new key
-            _write_key_directly(target.backend, cid, source_key.key_bytes)
-            result.migrated += 1
+            try:
+                target.backend.put_key(
+                    cid,
+                    key_bytes=source_key.key_bytes,
+                    created_at=source_key.created_at,
+                )
+                result.migrated += 1
+            except KeyExistsError:
+                existing = target.backend.get_key(cid)
+                if existing is not None and existing.key_bytes == source_key.key_bytes:
+                    # Already migrated, re-running is safe.
+                    result.skipped += 1
+                else:
+                    result.errors.append(
+                        f"{cid}: target already has a different key — not overwritten. "
+                        "Resolve manually before retrying."
+                    )
 
         except Exception as e:
             result.errors.append(f"{cid}: {e}")
@@ -94,43 +118,11 @@ def migrate_keys(
         result.skipped,
         len(result.errors),
     )
+    if result.errors:
+        logger.warning(
+            "%d key(s) were not migrated and nothing was overwritten: %s",
+            len(result.errors),
+            "; ".join(result.errors[:10]),
+        )
 
     return result
-
-
-def _write_key_directly(backend, customer_id: str, key_bytes: bytes):
-    """
-    Write existing key bytes to a backend.
-
-    Bypasses the create_key flow
-    to preserve the exact key from the source during migration.
-    """
-    from gdpr_officer.backends.local import LocalKeystore
-
-    # Local backend: direct insert
-    if isinstance(backend, LocalKeystore):
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc)
-        backend._conn.execute(
-            "INSERT OR REPLACE INTO customer_keys (customer_id, key_bytes, created_at) "
-            "VALUES (?, ?, ?)",
-            [customer_id, key_bytes, now.isoformat()],
-        )
-        return
-
-    # Cloud backends: try the _write_key method if available
-    if hasattr(backend, "_keys"):
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc)
-        backend._keys.document(customer_id).set({
-            "key_bytes": key_bytes,
-            "created_at": now.isoformat(),
-        })
-        return
-
-    raise NotImplementedError(
-        f"Direct key writing not supported for backend type {type(backend).__name__}. "
-        "The backend needs to implement a migration-compatible write method."
-    )

@@ -106,6 +106,17 @@ class KeyBackend(abc.ABC):
         }
 
 
+    def put_key(self, customer_id: str, key_bytes: bytes, created_at: datetime) -> None:
+        """
+        Write an existing key as is, preserving its bytes and creation time.
+
+        Used by key migration to copy a key between backends. 
+        Never overwrites: raises KeyExistsError if the customer already has a key,
+        and NotImplementedError for backends that do not support key import.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support key import")
+
+
 # Backend registry
 BACKENDS: dict[str, type[KeyBackend]] = {}
 

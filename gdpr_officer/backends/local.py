@@ -17,6 +17,7 @@ from typing import Optional
 
 import duckdb
 
+from gdpr_officer.exceptions import KeyExistsError
 from gdpr_officer.key_backend import (
     CustomerKey,
     DeletionRecord,
@@ -168,6 +169,17 @@ class LocalKeystore(KeyBackend):
             )
             for r in rows
         ]
+
+    def put_key(self, customer_id: str, key_bytes: bytes, created_at: datetime) -> None:
+        """Write an existing key as is. Prevents overwrite of existing key."""
+        try:
+            self._conn.execute(
+                "INSERT INTO customer_keys (customer_id, key_bytes, created_at) "
+                "VALUES (?, ?, ?)",
+                [customer_id, key_bytes, created_at.isoformat()],
+            )
+        except duckdb.ConstraintException as e:
+            raise KeyExistsError(customer_id) from e
 
     def batch_get_or_create(self, customer_ids: list[str]) -> dict[str, CustomerKey]:
         """Optimised batch operation."""

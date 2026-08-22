@@ -20,12 +20,14 @@ from datetime import datetime, timezone
 from typing import Optional
 
 try:
+    from google.api_core.exceptions import AlreadyExists
     from google.cloud import firestore
 
     HAS_FIRESTORE = True
 except ImportError:
     HAS_FIRESTORE = False
 
+from gdpr_officer.exceptions import KeyExistsError
 from gdpr_officer.key_backend import (
     CustomerKey,
     DeletionRecord,
@@ -104,6 +106,17 @@ class FirestoreKeystore(KeyBackend):
             created_at=now,
             backend="gcp_firestore",
         )
+
+    def put_key(self, customer_id: str, key_bytes: bytes, created_at: datetime) -> None:
+        """Write an existing key as is. Prevents overwrite of existing keys."""
+        # create() fails if a key already exists.
+        try:
+            self._keys.document(customer_id).create({
+                "key_bytes": key_bytes,
+                "created_at": created_at.isoformat(),
+            })
+        except AlreadyExists as e:
+            raise KeyExistsError(customer_id) from e
 
     def delete_key(self, customer_id: str, reason: str, requested_by: str) -> DeletionRecord:
         now = datetime.now(timezone.utc)
@@ -188,7 +201,6 @@ class FirestoreKeystore(KeyBackend):
                 )
                 batch_count += 1
 
-                # Firestore batches are limited to 500 operations
                 if batch_count >= 499:
                     batch.commit()
                     batch = self._client.batch()
