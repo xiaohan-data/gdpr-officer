@@ -8,11 +8,11 @@ key migration, and config parsing.
 import tempfile
 
 import pytest
+from cryptography.exceptions import InvalidTag
 
 from gdpr_officer import GdprOfficerConfig, PiiEncryptor, migrate_keys
 from gdpr_officer.backends.local import LocalKeystore
 from gdpr_officer.encryptor import EncryptionEngine
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ class TestEncryptionEngine:
         k1 = ks.create_key("c1")
         k2 = ks.create_key("c2")
         enc = engine.encrypt_value("secret", k1)
-        with pytest.raises(Exception):
+        with pytest.raises(InvalidTag):
             engine.decrypt_value(enc, k2)
 
 

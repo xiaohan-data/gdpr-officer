@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional
 
 import duckdb
 
@@ -82,7 +81,7 @@ class LocalKeystore(KeyBackend):
         for sql in _SCHEMA_SQL:
             self._conn.execute(sql)
 
-    def get_key(self, customer_id: str) -> Optional[CustomerKey]:
+    def get_key(self, customer_id: str) -> CustomerKey | None:
         result = self._conn.execute(
             "SELECT key_bytes, created_at FROM customer_keys WHERE customer_id = ?",
             [customer_id],

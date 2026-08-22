@@ -11,7 +11,6 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -50,7 +49,7 @@ class KeyBackend(abc.ABC):
     """
 
     @abc.abstractmethod
-    def get_key(self, customer_id: str) -> Optional[CustomerKey]:
+    def get_key(self, customer_id: str) -> CustomerKey | None:
         """Retrieve the encryption key for a customer. Returns None if not found."""
         ...
 

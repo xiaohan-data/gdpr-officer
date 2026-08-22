@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from typing import Optional
 
 try:
     from google.api_core.exceptions import AlreadyExists
@@ -74,7 +73,7 @@ class FirestoreKeystore(KeyBackend):
         self._keys = self._client.collection(keys_collection)
         self._deletion_log = self._client.collection(deletion_log_collection)
 
-    def get_key(self, customer_id: str) -> Optional[CustomerKey]:
+    def get_key(self, customer_id: str) -> CustomerKey | None:
         data = self._keys.document(customer_id).get().to_dict()
 
         if data is None:

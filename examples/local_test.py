@@ -10,6 +10,7 @@ After running, inspect the DuckDB file yourself:
 """
 
 import os
+
 import pandas as pd
 
 from gdpr_officer import PiiEncryptor
