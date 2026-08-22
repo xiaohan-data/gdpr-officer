@@ -24,7 +24,7 @@ sources:
       - phone
       - full_name
       - birthdate
-      - postcode
+      - nationality
       - amount
       - ip_address
 
@@ -38,14 +38,13 @@ sources:
         to: age_group
         edges: [0, 18, 30, 40, 50, 65]     # 0-17, 18-29, 30-39, 40-49, 50-64, 65+
 
-      postcode:
+      nationality:
         rule: mapping
-        to: state
-        values:
-          "2000": NSW
-          "3000": VIC
-          "4000": QLD
-        default: Other                     # for values not listed above
+        to: region
+        groups:
+          EMEA: [NL, DE, ES]
+          OCEANIA: [AU, NZ]
+        default: Other                     # for values not in any group
 
       amount:
         rule: numeric_range

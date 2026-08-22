@@ -66,18 +66,35 @@ def test_age_group_custom_edges_and_bad_input():
 # ---------------------------------------------------------------------------
 
 def test_mapping_unmapped_never_leaks_original():
-    to_state = mapping({"2000": "NSW", "3000": "VIC"}, default="Other")
-    assert to_state("2000") == "NSW"
-    # An unlisted value must not fall through as itself.
-    assert to_state("9999") == "Other"
-    assert to_state(None) == "Other"
-    # A YAML key written as a string still matches numeric data.
-    assert to_state(2000) == "NSW"
+    to_region = mapping({"EMEA": ["NL", "DE"], "APAC": ["AU"]}, default="Other")
+    assert to_region("NL") == "EMEA"
+    assert to_region("AU") == "APAC"
+    # An unlisted value must not fall through as the original value.
+    assert to_region("US") == "Other"
+    assert to_region(None) == "Other"
 
 
-def test_mapping_requires_values():
-    with pytest.raises(ValueError, match="non-empty"):
+def test_mapping_string_form_matches_numeric_data():
+    to_band = mapping({"low": [1, 2], "high": [3]})
+    assert to_band("2") == "low"
+    assert to_band(3) == "high"
+
+
+def test_mapping_requires_a_group():
+    with pytest.raises(ValueError, match="at least one non-empty group"):
         mapping({})
+    with pytest.raises(ValueError, match="at least one non-empty group"):
+        mapping({"EMEA": []})
+
+
+def test_mapping_rejects_value_in_two_groups():
+    with pytest.raises(ValueError, match="is in both"):
+        mapping({"EMEA": ["NL"], "APAC": ["NL"]})
+
+
+def test_mapping_rejects_string_members():
+    with pytest.raises(ValueError, match="list of values"):
+        mapping({"EMEA": "NL"})
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +158,7 @@ def test_generaliser_receives_plaintext_not_ciphertext(officer):
     out = officer.encrypt_rows(
         [{"cid": "c-1", "postcode": "2000"}],
         customer_id="cid", pii=["postcode"],
-        generalise={"postcode": ("state", mapping({"2000": "NSW"}, default="Other"))},
+        generalise={"postcode": ("state", mapping({"NSW": ["2000"]}, default="Other"))},
     )
     row = out[0]
     assert row["state"] == "NSW"

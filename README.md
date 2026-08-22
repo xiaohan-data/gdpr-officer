@@ -66,7 +66,9 @@ row = officer.encrypt_row(row, customer_id="...", pii=[...])
 
 Enables analytical use of sensitive values.
 Creates a generalised version of a column, next to the encrypted original.
-Such as: an age group from a birthdate, a state from a postcode.
+Such as: an age group from a birthdate, a region from a nationality.
+
+#### !Consult your DPO whether your intended generalisation, and/or the combination of generalised columns pose a risk to re-identification, and whether it sufficiently meets compliance requirements!
 
 ```python
 from gdpr_officer import PiiEncryptor, age_group
@@ -90,12 +92,16 @@ Built-in rules:
 | Rule | Does | Settings |
 |------|------|----------|
 | `age_group` | Birthdate to an age group | `edges`, `labels`, `as_of` |
-| `mapping` | Your own lookup table | `values`, `default` |
+| `mapping` | Groups of values to a label | `groups`, `default` |
 | `numeric_range` | Number to a labelled range | `edges`, `labels`, `default` |
 | `truncate` | Keep the first N characters | `length`, `default` |
 
 An unmapped or unparseable value returns the rule's `default` (`None` if unset),
 never the original value.
+
+`age_group` is intended for events where age does not change, such as age at diagnosis. Age is computed at encryption time
+
+Alternatively, birthdate could be generalised into birthyear, to enable age-based analytics. !Consult your DPO whether this generalisation, and/or the combination of generalised columns pose a risk to re-identification!
 
 #### Configuring in YAML
 
@@ -113,7 +119,7 @@ sources:
       - email
       - phone
       - birthdate         # generalised columns are encrypted too
-      - postcode
+      - nationality
 
     generalise:           # adds a generalised column next to the encrypted original
       birthdate:
@@ -121,12 +127,12 @@ sources:
         to: age_group     # required: name of the target column
         edges: [0, 18, 30, 40, 50, 65]
 
-      postcode:
+      nationality:
         rule: mapping
-        to: state
-        values:
-          "2000": NSW
-          "3000": VIC
+        to: region
+        groups:
+          EMEA: [NL, DE, ES]
+          OCEANIA: [AU, NZ]
         default: Other
 ```
 
@@ -272,7 +278,7 @@ python examples/local_test.py    # Detailed inspection of encrypted output and k
 | `get_deletion_log()` | Return all erasure audit records |
 | `migrate_keys(source, target)` | Copy keys between backends preserving exact key bytes |
 | `age_group(edges, labels, as_of)` | Generaliser: birthdate to a labelled age group |
-| `mapping(values, default)` | Generaliser: your own lookup table |
+| `mapping(groups, default)` | Generaliser: groups of values to a label |
 | `numeric_range(edges, labels, default)` | Generaliser: number to a labelled range |
 | `truncate(length, default)` | Generaliser: keep the first N characters |
 

@@ -52,7 +52,8 @@ def age_group(
     labels: Sequence[str] | None = None,
 ) -> Generaliser:
     """
-    Map a birthdate to a labelled age group.
+    Map a birthdate to a labelled age group. 
+    Intended for events where age does not change, such as age at diagnosis.
 
     edges are ascending group starts and the last group is open-ended, so the
     default produces 0-17, 18-29, 30-39, 40-49, 50-59, 60-69, 70+. Pass labels
@@ -93,25 +94,32 @@ def age_group(
 
 
 def mapping(
-    values: dict[Any, Any],
+    groups: dict[Any, Sequence[Any]],
     default: Any = None,
 ) -> Generaliser:
     """
-    Replace a value using a lookup table.
-
-    Values not in the table become default, never the original value. Lookup
-    falls back to the value's string form, so YAML keys written as strings
-    still match numeric data.
+    Replace a value with the label of the group it belongs to.
+    A value can only be listed under one label. 
     """
-    if not values:
-        raise ValueError("mapping requires a non-empty values table")
-    as_text = {str(k): v for k, v in values.items()}
+    label_of: dict[Any, Any] = {}
+    for label, members in groups.items():
+        # A bare string would iterate as characters.
+        if isinstance(members, str) or not isinstance(members, Sequence):
+            raise ValueError(f"groups['{label}'] must be a list of values")
+        for member in members:
+            if label_of.setdefault(member, label) != label:
+                raise ValueError(
+                    f"'{member}' is in both '{label_of[member]}' and '{label}'"
+                )
+    if not label_of:
+        raise ValueError("mapping requires at least one non-empty group")
+    as_text = {str(k): v for k, v in label_of.items()}
 
     def to_mapped(value: Any) -> Any:
         if value is None or value == "":
             return default
-        if value in values:
-            return values[value]
+        if value in label_of:
+            return label_of[value]
         return as_text.get(str(value), default)
 
     return to_mapped

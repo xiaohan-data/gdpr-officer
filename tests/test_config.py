@@ -36,7 +36,7 @@ CONFIG = {
                 "postcode": {
                     "rule": "mapping",
                     "to": "state",
-                    "values": {"2000": "NSW", "3000": "VIC"},
+                    "groups": {"NSW": ["2000"], "VIC": ["3000"]},
                     "default": "Other",
                 },
             },
@@ -246,14 +246,14 @@ def test_shipped_template_is_valid():
 
     customers = config.get_source("customers")
     assert customers.pii_columns == [
-        "email", "phone", "full_name", "birthdate", "postcode", "amount", "ip_address",
+        "email", "phone", "full_name", "birthdate", "nationality", "amount", "ip_address",
     ]
     # All four rules appear on the first table.
-    assert set(customers.generalise) == {"birthdate", "postcode", "amount", "ip_address"}
+    assert set(customers.generalise) == {"birthdate", "nationality", "amount", "ip_address"}
 
     df = pd.DataFrame([{
         "customer_id": "c-1", "email": "a@example.com", "phone": "+61 400 000 000",
-        "full_name": "Alice Tan", "birthdate": "1982-01-15", "postcode": "3000",
+        "full_name": "Alice Tan", "birthdate": "1982-01-15", "nationality": "DE",
         "amount": 75000, "ip_address": "203.0.113.42",
     }])
     officer = PiiEncryptor(key_backend="local", key_backend_config={"db_path": ":memory:"})
@@ -262,11 +262,11 @@ def test_shipped_template_is_valid():
         generalise=customers.generalise,
     )
     row = out.iloc[0]
-    assert row["state"] == "VIC"
+    assert row["region"] == "EMEA"
     assert row["amount_range"] == "50000-99999"
     assert row["ip_prefix"] == "203.0.1"
     assert list(out.columns) == [
         "customer_id", "email", "phone", "full_name",
-        "birthdate", "age_group", "postcode", "state",
+        "birthdate", "age_group", "nationality", "region",
         "amount", "amount_range", "ip_address", "ip_prefix",
     ]
