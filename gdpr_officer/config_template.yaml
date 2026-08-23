@@ -25,7 +25,7 @@ sources:
       - full_name
       - birthdate
       - nationality
-      - amount
+      - income
       - ip_address
 
     # Names of columns to be generalised.
@@ -46,9 +46,9 @@ sources:
           OCEANIA: [AU, NZ]
         default: Other                     # for values not in any group
 
-      amount:
+      income:
         rule: numeric_range
-        to: amount_range
+        to: income_range
         edges: [0, 50000, 100000, 200000]  # 0-49999, 50000-99999, 100000-199999, 200000+
 
       ip_address:

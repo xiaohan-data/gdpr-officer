@@ -246,15 +246,15 @@ def test_shipped_template_is_valid():
 
     customers = config.get_source("customers")
     assert customers.pii_columns == [
-        "email", "phone", "full_name", "birthdate", "nationality", "amount", "ip_address",
+        "email", "phone", "full_name", "birthdate", "nationality", "income", "ip_address",
     ]
     # All four rules appear on the first table.
-    assert set(customers.generalise) == {"birthdate", "nationality", "amount", "ip_address"}
+    assert set(customers.generalise) == {"birthdate", "nationality", "income", "ip_address"}
 
     df = pd.DataFrame([{
         "customer_id": "c-1", "email": "a@example.com", "phone": "+61 400 000 000",
         "full_name": "Alice Tan", "birthdate": "1982-01-15", "nationality": "DE",
-        "amount": 75000, "ip_address": "203.0.113.42",
+        "income": 75000, "ip_address": "203.0.113.42",
     }])
     officer = PiiEncryptor(key_backend="local", key_backend_config={"db_path": ":memory:"})
     out = officer.encrypt_df(
@@ -263,10 +263,10 @@ def test_shipped_template_is_valid():
     )
     row = out.iloc[0]
     assert row["region"] == "EMEA"
-    assert row["amount_range"] == "50000-99999"
+    assert row["income_range"] == "50000-99999"
     assert row["ip_prefix"] == "203.0.1"
     assert list(out.columns) == [
         "customer_id", "email", "phone", "full_name",
         "birthdate", "age_group", "nationality", "region",
-        "amount", "amount_range", "ip_address", "ip_prefix",
+        "income", "income_range", "ip_address", "ip_prefix",
     ]
